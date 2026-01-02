@@ -179,7 +179,8 @@
 			const randomIndex = Math.floor(Math.random() * allNames.length);
 			const randomName = allNames[randomIndex];
 			// merge default args with query string args
-			var args = ['+set', 'fs_cdn', '<%= content %>', '+set', 'fs_game', 'cpma', '+set', 'mapname', 'cpm1a', '+set', 'sv_master1', 'master.tremulous.online', '+set', 'name', randomName];
+			//var args = ['+set', 'fs_cdn', '<%= content %>', '+set', 'fs_game', 'cpma', '+set', 'mapname', 'cpm1a', '+set', 'sv_master1', 'master.tremulous.online', '+set', 'name', randomName];
+			var args = [/*'+set', 'fs_debug', '1',*/ '+set', 'fs_basepath', 'tremulous_base', '+set', 'fs_homepath', 'tremulous_home', '+set', 'fs_cdn', '127.0.0.1:9000', '+set', 'sv_master1', 'master.tremulous.online', '+set', 'name', randomName];
 			args.push.apply(args, getQueryCommands());
 			Module.onRuntimeInitialized = function() {
 				Module.callMain(args);
