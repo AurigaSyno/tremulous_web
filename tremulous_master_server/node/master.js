@@ -1,7 +1,8 @@
 var _ = require('underscore');
 var fs = require('fs');
 var https = require('https');
-var logger = require('winston');
+var winston = require('winston');
+
 var opt = require('optimist');
 var url = require('url');
 var os = require('os'); // Import the 'os' module
@@ -22,8 +23,11 @@ if (argv.h || argv.help) {
 	return;
 }
 
-logger.cli();
-logger.level = 'debug';
+var logger = winston.createLogger({
+	level: 'debug',
+	format: winston.format.cli(),
+	transports: [new winston.transports.Console()]
+});
 
 //var config = loadConfig(argv.port);
 var config = {
