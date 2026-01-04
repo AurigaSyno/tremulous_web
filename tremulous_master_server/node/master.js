@@ -1,8 +1,8 @@
 var _ = require('underscore');
 var fs = require('fs');
+var http = require('http');
 var https = require('https');
-var logger = require('winston');
-var opt = require('optimist');
+var winston = require('winston');
 var url = require('url');
 var os = require('os'); // Import the 'os' module
 
@@ -10,29 +10,60 @@ var WebSocketClient = require('ws');
 var WebSocketServer = require('ws').Server;
 var Dgram = require('dgram');
 
-var argv = require('optimist')
-	.describe('config', 'Location of the configuration file').default('config', './config.json')
-    .describe('websocket_port', 'Port for master server to use for communication with the web client').default('websocket_port', '30700')
-    .describe('udp_port', 'Port for master server to use for communication with the game servers').default('udp_port', '40700')
-	.describe('address', 'Override local IP address').default('address', 'localhost')
-	.argv;
+var argv = require('minimist')(process.argv.slice(2), {
+	default: {
+		config: './config.json',
+		websocket_port: '30700',
+		udp_port: '40700',
+		address: 'localhost',
+		ssl: false
+	},
+	boolean: ['ssl']
+});
 
 if (argv.h || argv.help) {
-	opt.showHelp();
+	console.log('Usage: node master.js [options]');
+	console.log('Options:');
+	console.log('  --config <path>        Location of the configuration file (default: ./config.json)');
+	console.log('  --websocket_port <port> Port for master server to use for communication with the web client (default: 30700)');
+	console.log('  --udp_port <port>      Port for master server to use for communication with the game servers (default: 40700)');
+	console.log('  --address <addr>       Override local IP address (default: localhost)');
+	console.log('  --ssl                  Enable SSL/TLS (default: disabled for development)');
+	console.log('  --privateKey <path>    Path to SSL private key file (default: /etc/letsencrypt/live/master.tremulous.online/privkey.pem)');
+	console.log('  --certificate <path>   Path to SSL certificate file (default: /etc/letsencrypt/live/master.tremulous.online/fullchain.pem)');
+	console.log('  -h, --help             Show this help message');
 	return;
 }
 
-logger.cli();
-logger.level = 'debug';
+winston.add(new winston.transports.Console({
+	format: winston.format.combine(
+		winston.format.colorize(),
+		winston.format.simple()
+	)
+}));
+winston.level = 'debug';
 
-//var config = loadConfig(argv.port);
-var config = {
-    websocket_port: argv.websocket_port,
-	udp_port: argv.udp_port,
-	address: argv.address,
-	privateKey: '/etc/letsencrypt/live/master.tremulous.online/privkey.pem',
-	certificate: '/etc/letsencrypt/live/master.tremulous.online/fullchain.pem',
-};
+var config = loadConfig(argv.config);
+
+// Override with command line arguments if provided
+if (argv.websocket_port !== '30700') {
+	config.websocket_port = argv.websocket_port;
+}
+if (argv.udp_port !== '40700') {
+	config.udp_port = argv.udp_port;
+}
+if (argv.address !== 'localhost') {
+	config.address = argv.address;
+}
+if (argv.ssl) {
+	config.ssl = true;
+}
+if (argv.privateKey) {
+	config.privateKey = argv.privateKey;
+}
+if (argv.certificate) {
+	config.certificate = argv.certificate;
+}
 var clients = [];
 var servers = {};
 var pruneInterval = 350 * 1000;
@@ -111,26 +142,26 @@ function buildChallenge() {
 }
 
 function handleGetServers(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> getservers');
+	winston.info(conn.addr + ':' + conn.port + ' ---> getservers');
 
 	// sendGetServersResponse(conn, servers);
 	sendGetServersWebResponse(conn, servers);
 }
 
 function handleHeartbeat(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> heartbeat');
+	winston.info(conn.addr + ':' + conn.port + ' ---> heartbeat');
 
 	sendGetInfo(conn);
 }
 
 function handleHeartbeatUDP(udp, rinfo, data) {
-	logger.info(rinfo.addr + ':' + rinfo.port + ' ---> heartbeat');
+	winston.info(rinfo.addr + ':' + rinfo.port + ' ---> heartbeat');
 
 	sendGetInfoUDP(udp, rinfo);
 }
 
 function handleInfoResponse(conn, data) {
-	logger.info(conn.addr + ':' + conn.port + ' ---> infoResponse');
+	winston.info(conn.addr + ':' + conn.port + ' ---> infoResponse');
 
 	var info = parseInfoString(data);
 	// TODO validate data
@@ -139,7 +170,7 @@ function handleInfoResponse(conn, data) {
 }
 
 function handleInfoResponseUDP(udp, rinfo, data) {
-	logger.info(rinfo.address + ':' + rinfo.port + ' ---> infoResponse');
+	winston.info(rinfo.address + ':' + rinfo.port + ' ---> infoResponse');
 
 	var info = parseInfoString(data);
 	// TODO validate data
@@ -151,7 +182,7 @@ function handleInfoResponseUDP(udp, rinfo, data) {
 function sendGetInfo(conn) {
 	var challenge = buildChallenge();
 
-	logger.info(conn.addr + ':' + conn.port + ' <--- getinfo with challenge \"' + challenge + '\"');
+	winston.info(conn.addr + ':' + conn.port + ' <--- getinfo with challenge \"' + challenge + '\"');
 
 	var buffer = formatOOB('getinfo ' + challenge);
 	conn.socket.send(buffer, { binary: true });
@@ -160,7 +191,7 @@ function sendGetInfo(conn) {
 function sendGetInfoUDP(udp, rinfo) {
 	var challenge = buildChallenge();
 
-	logger.info(rinfo.address + ':' + rinfo.port + ' <--- getinfo with challenge \"' + challenge + '\"');
+	winston.info(rinfo.address + ':' + rinfo.port + ' <--- getinfo with challenge \"' + challenge + '\"');
 
 	var buffer = formatOOB('getinfo ' + challenge);
 	udp.send(Buffer.from(buffer), rinfo.port, rinfo.address);
@@ -187,7 +218,7 @@ function sendGetServersResponse(conn, servers) {
 	}
 	msg += '\\EOT';
 
-	logger.info(conn.addr + ':' + conn.port + ' <--- getserversResponse with ' + Object.keys(servers).length + ' server(s)');
+	winston.info(conn.addr + ':' + conn.port + ' <--- getserversResponse with ' + Object.keys(servers).length + ' server(s)');
 
 	var buffer = formatOOB(msg);
 	conn.socket.send(buffer, { binary: true });
@@ -204,7 +235,7 @@ function sendGetServersWebResponse(conn, servers) {
 
 		var server = servers[id];
 		if (!(server.addr in ip_to_host)) {
-			logger.info('Cannot find address ' + server.addr + ' in ' + JSON.stringify(ip_to_host));
+			winston.info('Cannot find address ' + server.addr + ' in ' + JSON.stringify(ip_to_host));
 			continue
 		}
 		
@@ -214,7 +245,7 @@ function sendGetServersWebResponse(conn, servers) {
 	}
 	msg += '\\EOT';
 
-	logger.info(conn.addr + ':' + conn.port + ' <--- getserverswebResponse with ' + Object.keys(servers).length + ' server(s)');
+	winston.info(conn.addr + ':' + conn.port + ' <--- getserverswebResponse with ' + Object.keys(servers).length + ' server(s)');
 
 	var buffer = formatOOB(msg);
 	conn.socket.send(buffer, { binary: true });
@@ -250,7 +281,7 @@ function removeServer(id) {
 
 	delete servers[id];
 
-	logger.info(server.addr + ':' + server.port + ' timed out, ' + Object.keys(servers).length + ' server(s) currently registered');
+	winston.info(server.addr + ':' + server.port + ' timed out, ' + Object.keys(servers).length + ' server(s) currently registered');
 }
 
 function pruneServers() {
@@ -290,7 +321,7 @@ function addClient(conn) {
 		return;  // already subscribed
 	}
 
-	logger.info(conn.addr + ':' + conn.port + ' ---> subscribe');
+	winston.info(conn.addr + ':' + conn.port + ' ---> subscribe');
 
 	clients.push(conn);
 }
@@ -303,7 +334,7 @@ function removeClient(conn) {
 
 	var conn = clients[idx];
 
-	logger.info(conn.addr + ':' + conn.port + ' ---> unsubscribe');
+	winston.info(conn.addr + ':' + conn.port + ' ---> unsubscribe');
 
 	clients.splice(idx, 1);
 }
@@ -342,43 +373,93 @@ function connection(ws, req) {
 	this.socket = ws;
 	this.addr = getRemoteAddress(ws, req);
 	this.port = getRemotePort(ws, req);
-	logger.info("Received websocket connection request from " + this.addr + ":" + this.port);
+	winston.info("Received websocket connection request from " + this.addr + ":" + this.port);
 }
 
 function loadConfig(configPath) {
 	var config = {
-		port: 30700
+		websocket_port: 30700,
+		udp_port: 40700,
+		address: 'localhost',
+		ssl: false
 	};
 
-	/*try {
-		console.log('Loading config file from ' + configPath + '..');
+	try {
+		winston.info('Loading config file from ' + configPath + '..');
 		var data = require(configPath);
 		_.extend(config, data);
 	} catch (e) {
-		console.log('Failed to load config', e);
-	}*/
+		winston.warn('Failed to load config file: ' + e.message);
+		winston.info('Using default configuration');
+	}
+
+	// Replace {domain} placeholder in SSL certificate paths
+	if (config.domain) {
+		if (config.privateKey) {
+			config.privateKey = config.privateKey.replace(/{domain}/g, config.domain);
+		}
+		if (config.certificate) {
+			config.certificate = config.certificate.replace(/{domain}/g, config.domain);
+		}
+	}
+
+	// Validate SSL configuration
+	if (config.ssl && (!config.privateKey || !config.certificate)) {
+		winston.warn('SSL is enabled but privateKey or certificate is not configured');
+		winston.info('Disabling SSL and falling back to HTTP');
+		config.ssl = false;
+	}
 
 	return config;
 }
 
 (function main() {
-    const privateKey = fs.readFileSync(config.privateKey, 'utf8');
-    const certificate = fs.readFileSync(config.certificate, 'utf8');
+	var server;
 
-	var server = https.createServer({
-		key: privateKey, 
-		cert: certificate
-	});
+	if (config.ssl) {
+		try {
+			const privateKey = fs.readFileSync(config.privateKey, 'utf8');
+			const certificate = fs.readFileSync(config.certificate, 'utf8');
+			server = https.createServer({
+				key: privateKey,
+				cert: certificate
+			});
+			winston.info('SSL/TLS enabled');
+		} catch (e) {
+			winston.error('Failed to load SSL certificates: ' + e.message);
+			winston.info('Falling back to HTTP (SSL disabled)');
+			server = http.createServer();
+		}
+	} else {
+		winston.info('Running without SSL/TLS (development mode)');
+		server = http.createServer();
+	}
 
 	var wss = new WebSocketServer({
 		server: server
 	});
 
+	wss.on('error', (err) => {
+		winston.error('WebSocket server error: ' + err.message);
+		if (err.code === 'EADDRINUSE') {
+			winston.error('WebSocket port ' + config.websocket_port + ' is already in use. Please check if another master server instance is running.');
+		}
+		process.exit(1);
+	});
+
 	const udp = Dgram.createSocket('udp4'); // 'udp4' for IPv4, 'udp6' for IPv6
 
-    udp.bind(config.udp_port, () => {
-        console.log('master server (UDP) listening on port ' + config.udp_port);
-    });
+	   udp.on('error', (err) => {
+	       winston.error('UDP socket error: ' + err.message);
+	       if (err.code === 'EADDRINUSE') {
+	           winston.error('UDP port ' + config.udp_port + ' is already in use. Please check if another master server instance is running.');
+	       }
+	       process.exit(1);
+	   });
+
+	   udp.bind(config.udp_port, () => {
+	       console.log('master server (UDP) listening on port ' + config.udp_port);
+	   });
 
     udp.on('message', (buffer, rinfo) => {
         console.log(`Received UDP connection request from: ${rinfo.address}:${rinfo.port}`);
@@ -453,8 +534,15 @@ function loadConfig(configPath) {
 	});
 
 	// listen only on 0.0.0.0 to force ipv4
-	server.listen(config.websocket_port, '0.0.0.0',  function() {
-			console.log('master server (Websocket) listening on port ' + server.address().port);
+	server.listen(config.websocket_port, '0.0.0.0', function() {
+		var protocol = config.ssl ? 'wss' : 'ws';
+		console.log('master server (' + protocol.toUpperCase() + ') listening on port ' + server.address().port);
+	}).on('error', (err) => {
+		winston.error('HTTP server error: ' + err.message);
+		if (err.code === 'EADDRINUSE') {
+			winston.error('Port ' + config.websocket_port + ' is already in use. Please check if another master server instance is running.');
+		}
+		process.exit(1);
 	});
 
 	setInterval(pruneServers, pruneInterval);

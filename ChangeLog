@@ -1,0 +1,71 @@
+ChangeLog for Tremulous Web
+============================
+
+2026-01-03 from redrumrobot 
+
+Version 1.0.1 - Updates to packages and improved logging functionality
+-------------
+
+1. Dependency Modernization
+   - Upgraded Express from v3.3.8 to v5.2.1 in content server
+   - Upgraded Winston from v2.4.0 to v3.14.2 in master and content servers
+   - Replaced deprecated 'optimist' package with 'minimist' v1.2.8
+   - Added 'compression' middleware v1.7.5 for response compression
+   - Added 'fs-extra' v11.2.0 for enhanced filesystem operations
+   - Removed deprecated 'wrench' package
+
+2. Master Server Enhancements (tremulous_master_server/node/master.js)
+   - Added SSL/TLS support with optional configuration
+   - Implemented graceful fallback to HTTP when SSL certificates fail
+   - Added {domain} placeholder replacement for SSL certificate paths
+   - Enhanced loadConfig() function with better error handling
+   - Added command-line argument overrides for config values
+   - Updated logging to use Winston v3 API with colorized console output
+   - Added HTTP module import for fallback server creation
+   - Improved help message with SSL configuration options
+   - Added comprehensive error handling for WebSocket, UDP, and HTTP servers
+   - Enhanced startup logging to display protocol (WS/WSS) based on SSL configuration
+
+3. Content Server Improvements (tremulous_content_server/node/content.js)
+   - Added compression middleware for response compression (enabled for all requests)
+   - Updated Winston to v3 with new API and configuration
+   - Enhanced logging configuration with file transport support
+   - Added support for configurable log levels, paths, and rotation:
+     * config.logging.logLevel - sets logging level (default: 'info')
+     * config.logging.logPath - directory for log files (default: 'logs')
+     * config.logging.logName - base name for log file (default: 'content-server')
+     * config.logging.logMaxSizeBytes - maximum log file size (default: 10485760)
+     * config.logging.logMaxFiles - number of rotated files to keep (default: 5)
+   - Added automatic log directory creation if it doesn't exist
+
+4. Client-Side Runtime Checks (tremulous_client/node/bin/tremulous.js)
+   - Added minimum runtime version checks:
+     * Node.js v16.0.0+ (packed version 160000)
+     * Safari v15.0.0+ (packed version 150000)
+     * Firefox v79+
+     * Chrome v85+
+   - Implemented version checking using packed format conversion functions
+   - Added TARGET_NOT_SUPPORTED sentinel value (2147483647) for undetected browsers
+   - Updated environment detection to use globalThis for better cross-environment compatibility
+   - Improved error handling with abort() function for endianness check failures
+   - Emscripten runtime: wasmMemory and runtimeInitialized migrated from global scope to module-based encapsulation
+   - Changed runtime_shared.js include to runtime_common.js
+
+5. Security Improvements
+   - SSL/TLS support for master server with proper certificate validation
+   - Modernized dependency chain with security patches
+   - Better error handling for certificate loading failures
+
+6. Configuration Enhancements
+   - Master server now supports SSL/TLS via config file or CLI arguments
+   - Content server logging is now fully configurable
+   - Better validation of SSL configuration before server startup
+
+7. Error Handling and Reliability
+   - Added comprehensive error handling for all server components:
+     * WebSocket server errors with EADDRINUSE detection
+     * UDP socket errors with EADDRINUSE detection
+     * HTTP server errors with EADDRINUSE detection
+   - All server components now exit gracefully on port conflicts
+   - Enhanced error messages to help diagnose configuration issues
+   - SSL certificate loading failures now trigger automatic HTTP fallback

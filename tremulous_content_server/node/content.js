@@ -1,35 +1,89 @@
 var _ = require('underscore');
 var async = require('async');
+var compression = require('compression');
 var crc32 = require('buffer-crc32');
 var express = require('express');
 var fs = require('fs');
 var http = require('http');
-var logger = require('winston');
-var opt = require('optimist');
+var winston = require('winston');
+var logger = winston;
 var path = require('path');
 var send = require('send');
-var wrench = require('wrench');
 var zlib = require('zlib');
 
-var argv = require('optimist')
-	.describe('config', 'Location of the configuration file').default('config', './config.json')
-	.argv;
+var argv = require('minimist')(process.argv.slice(2), {
+	default: {
+		config: './config.json'
+	}
+});
 
 if (argv.h || argv.help) {
-	opt.showHelp();
+	console.log('Usage: node content.js [options]');
+	console.log('Options:');
+	console.log('  --config <path>  Location of the configuration file (default: ./config.json)');
+	console.log('  -h, --help       Show this help message');
 	return;
 }
 
-logger.cli();
-logger.level = 'debug';
+// Add console transport by default to prevent "no transports" warning
+logger.add(new winston.transports.Console({
+	format: winston.format.combine(
+		winston.format.colorize(),
+		winston.format.simple()
+	)
+}));
 
 var config = loadConfig(argv.config);
-var validAssets = ['.pk3', '.run', '.sh', '.qvm'];
+var validAssets = config.validAssets || ['.pk3', '.run', '.sh', '.qvm'];
 var currentManifestTimestamp;
 var currentManifest;
 
+// Configure logger based on config
+logger.level = config.logging && config.logging.logLevel ? config.logging.logLevel : 'info';
+
+// Add file transport if logging is enabled
+if (config.logging && config.logging.enabled) {
+	var logPath = config.logging.logPath || 'logs';
+	var logName = config.logging.logName || 'content-server';
+	var maxSize = config.logging.logMaxSizeBytes || 10485760;
+	var maxFiles = config.logging.logMaxFiles || 5;
+
+	// Ensure log directory exists
+	if (!fs.existsSync(logPath)) {
+		fs.mkdirSync(logPath, { recursive: true });
+	}
+
+	logger.add(new winston.transports.File({
+		filename: path.join(logPath, logName + '.log'),
+		maxsize: maxSize,
+		maxFiles: maxFiles,
+		json: false,
+		timestamp: true
+	}));
+}
+
 function getAssets() {
-	return wrench.readdirSyncRecursive(config.root).filter(function (file) {
+	var files = [];
+	
+	function readDirRecursive(dir) {
+		var entries = fs.readdirSync(dir, { withFileTypes: true });
+		
+		for (var i = 0; i < entries.length; i++) {
+			var entry = entries[i];
+			var fullPath = path.join(dir, entry.name);
+			
+			if (entry.isDirectory()) {
+				readDirRecursive(fullPath);
+			} else if (entry.isFile()) {
+				var relativePath = path.relative(config.root, fullPath);
+				files.push(relativePath);
+			}
+		}
+	}
+	
+	readDirRecursive(config.root);
+	
+	return files.filter(function (file) {
 		var ext = path.extname(file);
 		return validAssets.indexOf(ext) !== -1;
 	}).map(function (file) {
@@ -52,12 +106,12 @@ function generateManifest(callback) {
 		var size = 0;
 
 		// stream each file in, generating a hash for it's original
-		// contents, and gzip'ing the buffer to determine the compressed
-		// length for the client so it can present accurate progress info
+		// contents, and gzip'ing buffer to determine the compressed
+		// length for client so it can present accurate progress info
 		var stream = fs.createReadStream(file);
 
-		// gzip the file contents to determine the compressed length
-		// of the file so the client can present correct progress info
+		// gzip file contents to determine the compressed length
+		// of file so that client can present correct progress info
 		var gzip = zlib.createGzip();
 
 		stream.on('error', function (err) {
@@ -105,7 +159,7 @@ function handleAsset(req, res, next) {
 	var checksum = parseInt(req.params[1], 10);
 	var basename = req.params[2];
 	var relativePath = path.join(basedir, basename);
-	var absolutePath = path.join(config.root, relativePath);
+	var absolutePath = path.resolve(config.root, relativePath);
 
 	// make sure they're requesting a valid asset
 	var asset;
@@ -125,13 +179,14 @@ function handleAsset(req, res, next) {
 
 	logger.info('serving ' + relativePath + ' (crc32 ' + checksum + ') to ' + req.ip);
 
-	res.sendfile(absolutePath, { maxAge: Infinity });
+	res.sendFile(absolutePath, { maxAge: Infinity });
 }
 
 function loadConfig(configPath) {
 	var config = {
 		root: 'pk3_assets',
-		port: 9000
+		port: 9000,
+		validAssets: ['.pk3', '.run', '.sh', '.qvm']
 	};
 
 	try {
@@ -151,7 +206,7 @@ function loadConfig(configPath) {
 		res.setHeader('Access-Control-Allow-Origin', '*');
 		next();
 	});
-	app.use(express.compress({ filter: function(req, res) { return true; } }));
+	app.use(compression({ filter: function(req, res) { return true; } }));
 	app.get('/assets/manifest.json', handleManifest);
 	app.get(/^\/assets\/(.+\/|)(\d+)-(.+?)$/, handleAsset);
 
@@ -165,8 +220,9 @@ function loadConfig(configPath) {
 		// start listening
 		var server = http.createServer(app);
 
-		server.listen(config.port, function () {
-			logger.info('content server is now listening on port', server.address().address, server.address().port);
+		// listen only on 0.0.0.0 to force ipv4
+		server.listen(config.port, '0.0.0.0', function () {
+			logger.info('content server is now listening on port ' + server.address().port);
 		});
 		server.keepAliveTimeout = 60 * 1000;
 	});

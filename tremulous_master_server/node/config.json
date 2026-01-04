@@ -1,0 +1,9 @@
+{
+  "websocket_port": 30700,
+  "udp_port": 40700,
+  "address": "localhost",
+  "ssl": false,
+  "domain": "master.tremulous.online",
+  "privateKey": "/etc/letsencrypt/live/{domain}/privkey.pem",
+  "certificate": "/etc/letsencrypt/live/{domain}/fullchain.pem"
+}

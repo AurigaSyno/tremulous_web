@@ -1,0 +1,13 @@
+{
+  "root": "pk3_assets",
+  "port": 9000,
+  "validAssets": [".pk3", ".run", ".sh", ".qvm"],
+  "logging": {
+    "enabled": false,
+    "logPath": "logs",
+    "logName": "content-server",
+    "logLevel": "info",
+    "logMaxSizeBytes": 10485760,
+    "logMaxFiles": 5
+  }
+}
