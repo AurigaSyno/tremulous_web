@@ -142,4 +142,5 @@ vite.config.ts.timestamp-*
 
 # pk3 assets not in tremulous_assets/
 *.pk3
-!./tremulous_assets/*.pk3
+!tremulous_assets/*.pk3
+
