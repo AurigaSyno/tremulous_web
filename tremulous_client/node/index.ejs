@@ -73,7 +73,7 @@
 	</body>
 
 	<script>
-		const allNames = [
+		/*const allNames = [
 			"Aelar",
 			"Lyra",
 			"Faelan",
@@ -139,7 +139,7 @@
 			"Oberon",
 			'Peregrin',
 			"Quillon"
-		]
+		]*/
 		function getQueryCommands() {
 			var search = /([^&=]+)/g;
 			var query  = window.location.search.substring(1);
@@ -157,33 +157,51 @@
 			return args;
 		}
 
+		var gameInstance = null;
+
 		window.onload = function () {
 			function resizeViewport() {
-
-				if (!Module.canvas) {
-					// ignore if the canvas hasn't yet initialized
-					return;
+				if (!tremulous.canvas) {
+					return; // ignore if the canvas hasn't yet initialized
 				}
 				if ((document['webkitFullScreenElement'] || document['webkitFullscreenElement'] ||
-             document['mozFullScreenElement'] || document['mozFullscreenElement'] ||
-             document['fullScreenElement'] || document['fullscreenElement'])) {
+					document['mozFullScreenElement'] || document['mozFullscreenElement'] ||
+					document['fullScreenElement'] || document['fullscreenElement'])) {
 					// ignore resize events due to going fullscreen
 					return;
 				}
-				Module.setCanvasSize(Module.viewport.offsetWidth, Module.viewport.offsetHeight);
+				tremulous.setCanvasSize(tremulous.viewport.offsetWidth, tremulous.viewport.offsetHeight);
 			}
 
-			Module.viewport = document.getElementById('viewport-frame');
-			Module.elementPointerLock = true;
+			//const randomIndex = Math.floor(Math.random() * allNames.length);
+			//const randomName = allNames[randomIndex];
 
-			const randomIndex = Math.floor(Math.random() * allNames.length);
-			const randomName = allNames[randomIndex];
 			// merge default args with query string args
-			//var args = ['+set', 'fs_cdn', '<%= content %>', '+set', 'fs_game', 'cpma', '+set', 'mapname', 'cpm1a', '+set', 'sv_master1', 'master.tremulous.online', '+set', 'name', randomName];
-			var args = ['+set', 'fs_cdn', '<%= content %>', /*'+set', 'fs_debug', '1',*/ '+set', 'fs_basepath', 'tremulous_base', '+set', 'fs_homepath', 'tremulous_home', '+set', 'sv_master1', 'master.tremulous.online', '+set', 'name', randomName];
+			var args = [
+			'+set', 'fs_cdn', '"https://cdn.tremulo.us/assets"', 
+			/*'+set', 'fs_debug', '1',*/ 
+			'+set', 'fs_basepath', 'tremulous_base',
+			'+set', 'fs_homepath', 'tremulous_home',
+			'+set', 'sv_master1', 'master.tremulous.online',
+			/*'+set', 'name', randomName*/ ];
+
 			args.push.apply(args, getQueryCommands());
-			Module.onRuntimeInitialized = function() {
-				Module.callMain(args);
+			console.log(args);
+
+			if (!gameInstance) {
+				gameInstance = tremulous({
+					viewport: document.getElementById('viewport-frame'),
+					elementPointerLock: true,
+					canvas: document.getElementById('canvas'),
+					onRuntimeInitialized: function() {
+						this.callMain(args);
+					},
+					onExit: function(statusCode) {
+						if (statusCode === 0) {
+							window.location.href = 'https://tremulo.us';
+						}
+					}
+				});
 			}
 		};
 	</script>
