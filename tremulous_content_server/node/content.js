@@ -2,14 +2,23 @@ var _ = require('underscore');
 var async = require('async');
 var crc32 = require('buffer-crc32');
 var express = require('express');
+var compression = require('compression');
 var fs = require('fs');
 var http = require('http');
-var logger = require('winston');
+const winston = require('winston');
 var opt = require('optimist');
 var path = require('path');
 var send = require('send');
 var wrench = require('wrench');
 var zlib = require('zlib');
+
+const logger = winston.createLogger({
+  level: 'debug',
+  format: winston.format.simple(),
+  transports: [
+    new winston.transports.Console()
+  ]
+});
 
 var argv = require('optimist')
 	.describe('config', 'Location of the configuration file').default('config', './config.json')
@@ -19,9 +28,6 @@ if (argv.h || argv.help) {
 	opt.showHelp();
 	return;
 }
-
-logger.cli();
-logger.level = 'debug';
 
 var config = loadConfig(argv.config);
 var validAssets = ['.pk3', '.run', '.sh', '.qvm'];
@@ -106,7 +112,6 @@ function handleAsset(req, res, next) {
 	var basename = req.params[2];
 	var relativePath = path.join(basedir, basename);
 	var absolutePath = path.join(config.root, relativePath);
-
 	// make sure they're requesting a valid asset
 	var asset;
 	for (var i = 0; i < currentManifest.length; i++) {
@@ -125,12 +130,12 @@ function handleAsset(req, res, next) {
 
 	logger.info('serving ' + relativePath + ' (crc32 ' + checksum + ') to ' + req.ip);
 
-	res.sendfile(absolutePath, { maxAge: Infinity });
+	res.sendFile(absolutePath, { maxAge: Infinity });
 }
 
 function loadConfig(configPath) {
 	var config = {
-		root: 'pk3_assets',
+		root: path.join(__dirname, 'pk3_assets'),
 		port: 9000
 	};
 
@@ -151,7 +156,7 @@ function loadConfig(configPath) {
 		res.setHeader('Access-Control-Allow-Origin', '*');
 		next();
 	});
-	app.use(express.compress({ filter: function(req, res) { return true; } }));
+	app.use(compression({ filter: function(req, res) { return true; } }));
 	app.get('/assets/manifest.json', handleManifest);
 	app.get(/^\/assets\/(.+\/|)(\d+)-(.+?)$/, handleAsset);
 
@@ -166,7 +171,11 @@ function loadConfig(configPath) {
 		var server = http.createServer(app);
 
 		server.listen(config.port, function () {
-			logger.info('content server is now listening on port', server.address().address, server.address().port);
+			const address = server.address();
+			const bind = typeof address === 'string'
+				? 'pipe ' + address
+				: 'port ' + address.port;
+			logger.info('content server is now listening on ' + bind);
 		});
 		server.keepAliveTimeout = 60 * 1000;
 	});
